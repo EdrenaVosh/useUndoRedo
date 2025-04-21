@@ -1,27 +1,44 @@
 import { useCallback, useState, useMemo } from 'react';
 
-export const useUndoRedo = <T>(initialValue: T) => {
+interface Options<T> {
+  maxHistorySize?: number;
+  equalFn?: (a: T, b: T) => boolean;
+}
+
+export const useUndoRedo = <T>(initialValue: T, options: Options<T> = {}) => {
+  const defaultEquals = (a: T, b: T) => a === b;
+  const isEqual = options.equalFn || defaultEquals;
+
   const [state, setState] = useState<{
     past: T[];
     present: T;
     future: T[];
   }>({
     past: [],
-    present: initialValue,
+    present: structuredClone(initialValue),
     future: [],
   });
 
-  const set = useCallback((newValue: T) => {
-    setState((prev) => {
-      if (prev.present === newValue) return prev;
+  const set = useCallback(
+    (newValue: T) => {
+      setState((prev) => {
+        if (isEqual(prev.present, newValue)) return prev;
 
-      return {
-        past: prev.past.concat(prev.present),
-        present: newValue,
-        future: [],
-      };
-    });
-  }, []);
+        const newPast = prev.past.concat(structuredClone(prev.present));
+        const limitedPast =
+          options.maxHistorySize && newPast.length > options.maxHistorySize
+            ? newPast.slice(-options.maxHistorySize)
+            : newPast;
+
+        return {
+          past: limitedPast,
+          present: structuredClone(newValue),
+          future: [],
+        };
+      });
+    },
+    [options.maxHistorySize, isEqual]
+  );
 
   const undo = useCallback(() => {
     setState((prev) => {
@@ -55,7 +72,7 @@ export const useUndoRedo = <T>(initialValue: T) => {
   const reset = useCallback((value: T) => {
     setState({
       past: [],
-      present: value,
+      present: structuredClone(value),
       future: [],
     });
   }, []);
