@@ -9,9 +9,10 @@
   ],
   "type": "module",
   "scripts": {
+    "build": "tsc --project tsconfig.json",
     "tsc": "tsc --noEmit --skipLibCheck",
     "test": "jest",
-    "prepare": "npm run build",
+    "prepare": "npm run test && npm run lint && npm run build",
     "lint": "eslint . --cache"
   },
   "keywords": [
