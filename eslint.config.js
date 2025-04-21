@@ -3,7 +3,6 @@ import tseslint from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
-import prettier from 'eslint-plugin-prettier';
 
 export default [
   {
@@ -31,7 +30,6 @@ export default [
       '@typescript-eslint': tseslint,
       react: react,
       'react-hooks': reactHooks,
-      prettier: prettier,
     },
     settings: {
       react: {
@@ -42,12 +40,6 @@ export default [
       'react/react-in-jsx-scope': 'off',
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
-      'prettier/prettier': [
-        'error',
-        {
-          singleQuote: true,
-        },
-      ],
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
       'padding-line-between-statements': [

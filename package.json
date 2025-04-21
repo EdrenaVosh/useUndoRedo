@@ -1,7 +1,8 @@
 {
   "name": "use-undo-redo-hook",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Lightweight and performant Undo/Redo hook for React",
+  "repository": "https://github.com/EdrenaVosh/useUndoRedo",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -47,7 +48,5 @@
   "peerDependencies": {
     "react": "^18.2.0"
   },
-  "dependencies": {
-    "prettier": "^3.5.3"
-  }
+  "dependencies": {}
 }
