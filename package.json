@@ -1,16 +1,36 @@
 {
   "name": "use-undo-redo-hook",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Lightweight and performant Undo/Redo hook for React",
   "repository": "https://github.com/EdrenaVosh/useUndoRedo",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    }
+  },
   "files": [
     "dist"
   ],
-  "type": "module",
+  "sideEffects": false,
+  "unpkg": "dist/esm/index.js",
+  "jsdelivr": "dist/esm/index.js",
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "npm run build:types && npm run build:cjs && npm run build:esm && npm run build:package-json",
+    "build:types": "tsc --project tsconfig.types.json",
+    "build:cjs": "tsc --project tsconfig.cjs.json",
+    "build:esm": "tsc --project tsconfig.esm.json",
+    "build:package-json": "echo '{\"type\":\"module\"}' > dist/esm/package.json && echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "tsc": "tsc --noEmit --skipLibCheck",
     "test": "jest",
     "prepare": "npm run test && npm run lint && npm run build",
