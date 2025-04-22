@@ -43,8 +43,10 @@ interface UndoRedoResult<T> {
   isCompressed: boolean;
 }
 
+const hasStructuredClone = typeof structuredClone === 'function';
+
 const safeStructuredClone = <T>(obj: T): T => {
-  if (typeof structuredClone === 'function') {
+  if (hasStructuredClone) {
     return structuredClone(obj);
   }
 
@@ -140,6 +142,13 @@ export const useUndoRedo = <T>(
   const batchInitialValueRef = useRef<T | null>(null);
   const batchLastValueRef = useRef<T | null>(null);
   const errorInWithBatchRef = useRef<boolean>(false);
+
+  const resetBatchState = useCallback(() => {
+    batchCountRef.current = 0;
+    batchInitialValueRef.current = null;
+    batchLastValueRef.current = null;
+    errorInWithBatchRef.current = false;
+  }, []);
 
   const set = useCallback((newValue: T) => {
     setState((prev) => {
@@ -249,20 +258,20 @@ export const useUndoRedo = <T>(
     });
   }, [decompressFn]);
 
-  const reset = useCallback((value: T) => {
-    batchCountRef.current = 0;
-    batchInitialValueRef.current = null;
-    batchLastValueRef.current = null;
-    errorInWithBatchRef.current = false;
+  const reset = useCallback(
+    (value: T) => {
+      resetBatchState();
 
-    setState({
-      past: [],
-      present: safeStructuredClone(value),
-      future: [],
-      isCompressed: optionsRef.current.compressHistory,
-      isBatching: false,
-    });
-  }, []);
+      setState({
+        past: [],
+        present: safeStructuredClone(value),
+        future: [],
+        isCompressed: optionsRef.current.compressHistory,
+        isBatching: false,
+      });
+    },
+    [resetBatchState]
+  );
 
   const startBatch = useCallback(() => {
     setState((prev) => {
@@ -293,27 +302,33 @@ export const useUndoRedo = <T>(
         return prev;
       }
 
+      const wasError = errorInWithBatchRef.current;
       errorInWithBatchRef.current = false;
-      batchCountRef.current = 0;
+
+      if (batchCountRef.current === 0) {
+        batchCountRef.current = 0;
+      }
 
       if (!batchInitialValueRef.current) {
         return {
           ...prev,
-          isBatching: false,
+          isBatching: batchCountRef.current > 0,
         };
       }
 
       if (equalFn(batchInitialValueRef.current, prev.present)) {
-        batchInitialValueRef.current = null;
-        batchLastValueRef.current = null;
+        if (batchCountRef.current === 0) {
+          batchInitialValueRef.current = null;
+          batchLastValueRef.current = null;
+        }
 
         return {
           ...prev,
-          isBatching: false,
+          isBatching: batchCountRef.current > 0,
         };
       }
 
-      if (onSet && batchLastValueRef.current) {
+      if (onSet && batchLastValueRef.current && batchCountRef.current === 0) {
         onSet(batchInitialValueRef.current, batchLastValueRef.current);
       }
 
@@ -329,8 +344,10 @@ export const useUndoRedo = <T>(
           : safeStructuredClone(batchInitialValueRef.current);
         const newPast = [...prev.past, storedInitialValue];
 
-        batchInitialValueRef.current = null;
-        batchLastValueRef.current = null;
+        if (batchCountRef.current === 0) {
+          batchInitialValueRef.current = null;
+          batchLastValueRef.current = null;
+        }
 
         const limitedPast =
           maxHistorySize && newPast.length > maxHistorySize
@@ -342,36 +359,42 @@ export const useUndoRedo = <T>(
           present: prev.present,
           future: [],
           isCompressed: compressHistory,
-          isBatching: false,
+          isBatching: batchCountRef.current > 0,
         };
       }
 
-      batchInitialValueRef.current = null;
-      batchLastValueRef.current = null;
+      if (batchCountRef.current === 0) {
+        batchInitialValueRef.current = null;
+        batchLastValueRef.current = null;
+      }
 
       return {
         ...prev,
-        isBatching: false,
+        isBatching: batchCountRef.current > 0,
       };
     });
   }, [decompressFn]);
 
   const withBatch = useCallback(
     <R>(fn: (state: T) => R): R => {
+      let result: R;
+      let error: unknown = null;
+
       try {
         startBatch();
-
-        const result = fn(state.present);
-
-        endBatch();
-
-        return result;
-      } catch (error) {
+        result = fn(state.present);
+      } catch (e) {
+        error = e;
         errorInWithBatchRef.current = true;
+      } finally {
         endBatch();
 
-        throw error;
+        if (error) {
+          throw error;
+        }
       }
+
+      return result!;
     },
     [startBatch, endBatch, state.present]
   );
@@ -379,9 +402,55 @@ export const useUndoRedo = <T>(
   const historyData = useMemo((): History<T> => {
     const stateIsCompressed = isCompressed(state);
 
+    const createLazyArray = (items: StoredData<T>[]): T[] => {
+      const proxy = new Proxy(items, {
+        get(target, prop) {
+          if (
+            typeof prop === 'string' &&
+            (!isNaN(Number(prop)) ||
+              prop === Symbol.iterator.toString() ||
+              ['map', 'forEach', 'length', 'filter', 'slice'].includes(prop))
+          ) {
+            if (prop === 'length') {
+              return target.length;
+            }
+
+            if (
+              prop === 'map' ||
+              prop === 'forEach' ||
+              prop === 'filter' ||
+              prop === 'slice'
+            ) {
+              return function (...args: unknown[]) {
+                // @ts-ignore
+                return Array.prototype[prop].apply(
+                  target.map((item) => decompressFn(item, stateIsCompressed)),
+                  args
+                );
+              };
+            }
+
+            if (prop === Symbol.iterator.toString()) {
+              return function* () {
+                for (let i = 0; i < target.length; i++) {
+                  yield decompressFn(target[i], stateIsCompressed);
+                }
+              };
+            }
+
+            return decompressFn(target[Number(prop)], stateIsCompressed);
+          }
+
+          return Reflect.get(target, prop);
+        },
+      });
+
+      return proxy as unknown as T[];
+    };
+
     return {
-      past: state.past.map((item) => decompressFn(item, stateIsCompressed)),
-      future: state.future.map((item) => decompressFn(item, stateIsCompressed)),
+      past: createLazyArray(state.past),
+      future: createLazyArray(state.future),
     };
   }, [state, decompressFn, isCompressed]);
 
