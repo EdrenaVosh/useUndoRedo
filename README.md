@@ -12,7 +12,7 @@ yarn add use-undo-redo-hook
 
 ## Features
 
-- 🪶 Lightweight (~1KB)
+- 🪶 Lightweight (< 10KB gzip)
 - 🚀 Performant (uses useMemo and useCallback)
 - 💪 Fully typed (written in TypeScript)
 - 🎯 Simple API
@@ -24,6 +24,7 @@ yarn add use-undo-redo-hook
 - 📦 Memory optimization with history compression
 - 🔔 Event callbacks for undo/redo operations
 - 🔗 Batch operations for grouping related changes
+- 🧠 Lazy history decompression for minimal memory footprint
 
 ## Usage
 
@@ -308,6 +309,7 @@ function TodoApp() {
   - `onSet` is triggered only once with the initial and final state
 - All state changes are performed using `structuredClone` for deep object copying
 - When `compressHistory` is enabled, states are stored as JSON strings to reduce memory usage
+- History items are lazily decompressed when accessed, improving memory usage
 
 ## Advanced Usage
 
@@ -322,6 +324,31 @@ const { state, set, undo, redo } = useUndoRedo(initialValue, {
 ```
 
 This will store past and future states as JSON strings, reducing memory usage at the cost of slight CPU overhead for serialization/deserialization.
+
+Starting from version 2.0.1, the hook uses lazy decompression to further optimize memory usage. This means history items are only decompressed when they are actually accessed, not when the history object is created, significantly reducing memory consumption for large histories.
+
+### Error Handling in Batch Operations
+
+The hook provides robust error handling for batch operations. When using `withBatch`, any errors that occur during the batch operation are properly caught and rethrown, while ensuring the batch state is properly cleaned up:
+
+```typescript
+try {
+  withBatch(() => {
+    set({ ...state, step1: true });
+
+    // If an error occurs here, the batch state is still properly cleaned up
+    performOperationThatMightFail();
+
+    set({ ...state, step1: true, step2: true });
+  });
+} catch (error) {
+  // Handle error
+  console.error('Batch operation failed:', error);
+
+  // The current state reflects the last successful set operation
+  // and the history is properly maintained
+}
+```
 
 ### Batch Changes for Complex Operations
 
